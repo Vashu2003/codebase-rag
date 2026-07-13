@@ -1,9 +1,10 @@
 """Ingest a local repo checkout: walk -> chunk -> embed -> store."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
-from . import graph, store
+from . import github, graph, store
 from .chunker import chunk_file
 from .config import settings
 from .embeddings import embed
@@ -52,6 +53,27 @@ def _resolve_root(path: str) -> Path:
         if not root.is_relative_to(allowed):
             raise ValueError("path is outside the allowed INGEST_ROOT")
     return root
+
+
+def ingest_source(
+    repo: str | None = None, path: str | None = None, url: str | None = None
+) -> IngestResponse:
+    """Ingest from exactly one source: a local `path` or a git `url` (cloned to
+    a temp dir, ingested, then removed). `repo` names the collection; for a URL
+    it defaults to the derived owner-name."""
+    if bool(path) == bool(url):
+        raise ValueError("provide exactly one of 'path' or 'url'")
+    if url:
+        url = github.validate_url(url)
+        name = repo or github.derive_repo_name(url)
+        tmp = github.clone(url)
+        try:
+            return ingest_repo(tmp, name)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    if not repo:
+        raise ValueError("'repo' name is required when ingesting a local path")
+    return ingest_repo(path, repo)
 
 
 def ingest_repo(path: str, repo: str) -> IngestResponse:

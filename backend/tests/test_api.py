@@ -15,6 +15,16 @@ def test_ingest_bad_path_returns_400(client):
     assert r.status_code == 400
 
 
+def test_ingest_disallowed_url_host_returns_400(client):
+    r = client.post("/ingest", json={"url": "https://evil.com/o/r"})
+    assert r.status_code == 400          # validated before any network call
+
+
+def test_ingest_no_source_returns_400(client):
+    r = client.post("/ingest", json={"repo": "x"})
+    assert r.status_code == 400          # neither path nor url
+
+
 def test_query_happy_path(client, monkeypatch):
     async def fake_answer(repo, question, top_k):
         return QueryResponse(

@@ -2,8 +2,10 @@ from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
-    path: str = Field(min_length=1)          # local repo checkout path
-    repo: str = Field(min_length=1, max_length=200)  # namespaces the collection
+    # exactly one of path/url; repo names the collection (derived from url if omitted)
+    path: str | None = Field(default=None, min_length=1)   # local repo checkout path
+    url: str | None = Field(default=None, min_length=1, max_length=512)  # https git URL
+    repo: str | None = Field(default=None, max_length=200)
 
 
 class Citation(BaseModel):

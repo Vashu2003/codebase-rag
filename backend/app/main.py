@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import embeddings, rag, reranker
 from .config import settings
-from .ingest import ingest_repo
+from .ingest import ingest_source
 from .models import (
     IngestRequest,
     IngestResponse,
@@ -55,12 +55,12 @@ def health():
 @app.post("/ingest", response_model=IngestResponse)
 def ingest(req: IngestRequest):
     try:
-        return ingest_repo(req.path, req.repo)
+        return ingest_source(repo=req.repo, path=req.path, url=req.url)
     except ValueError as e:
-        # these messages are safe/actionable (bad path, outside root, cap hit)
+        # these messages are safe/actionable (bad path/url, outside root, cap hit)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
-        log.exception("ingest failed for repo=%s", req.repo)
+        log.exception("ingest failed for repo=%s url=%s", req.repo, req.url)
         raise HTTPException(status_code=500, detail="ingest failed")
 
 

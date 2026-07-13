@@ -44,5 +44,10 @@ class Settings(BaseSettings):
     max_files: int = 5000            # cap files per repo (DoS guard)
     max_total_bytes: int = 200_000_000  # cap bytes per repo (~200MB)
 
+    # --- ingest from a git URL ---
+    git_allowed_hosts: str = "github.com"  # comma-separated https host allowlist
+    clone_timeout: int = 120               # seconds before a clone is aborted
+    clone_max_bytes: int = 500_000_000     # abort a clone that exceeds ~500MB on disk
+
 
 settings = Settings()
