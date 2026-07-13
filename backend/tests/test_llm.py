@@ -24,6 +24,21 @@ async def test_complete_routes_to_ollama(monkeypatch):
 
 
 @respx.mock
+async def test_complete_retries_transient_then_succeeds(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", "ollama")
+    monkeypatch.setattr(llm_mod, "_RETRY_BASE_DELAY", 0)  # no real sleeping
+    route = respx.post(f"{settings.ollama_host}/api/generate").mock(
+        side_effect=[
+            httpx.Response(503),                              # transient
+            httpx.Response(200, json={"response": "recovered"}),
+        ]
+    )
+    out = await llm_mod.complete("prompt")
+    assert out == "recovered"
+    assert route.call_count == 2
+
+
+@respx.mock
 async def test_complete_routes_to_gemini(monkeypatch):
     monkeypatch.setattr(settings, "llm_provider", "gemini")
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")

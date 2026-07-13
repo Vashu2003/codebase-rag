@@ -8,6 +8,10 @@ Ask any codebase questions in plain English — get answers grounded in the sour
 
 Runs **fully free & offline**: local embeddings + a local LLM (Ollama), or Gemini's free API tier if you want higher answer quality without a GPU.
 
+![codebase-rag answering a question about FastAPI's dependency injection, with file:line citations](docs/demo.png)
+
+> _Above: FastAPI's own source ingested (53 files → 623 chunks), then asked "How does dependency injection resolve dependencies?" — answered from the code with citations to `dependencies/utils.py:598-657`, `routing.py`, and more._
+
 ---
 
 ## How it works

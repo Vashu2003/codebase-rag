@@ -5,9 +5,30 @@ near-frontier quality without a GPU. Switch with LLM_PROVIDER in .env.
 """
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 from .config import settings
+
+# transient provider errors worth retrying (rate limit / overloaded / gateway)
+_RETRY_STATUS = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 1.0  # seconds; grows exponentially. Patched to 0 in tests.
+
+
+async def _with_retry(call):
+    delay = _RETRY_BASE_DELAY
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return await call()
+        except httpx.HTTPStatusError as e:
+            transient = e.response.status_code in _RETRY_STATUS
+            if transient and attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            raise
 
 
 async def _ollama(prompt: str) -> str:
@@ -46,6 +67,5 @@ async def _gemini(prompt: str) -> str:
 
 
 async def complete(prompt: str) -> str:
-    if settings.llm_provider == "gemini":
-        return await _gemini(prompt)
-    return await _ollama(prompt)
+    provider = _gemini if settings.llm_provider == "gemini" else _ollama
+    return await _with_retry(lambda: provider(prompt))
