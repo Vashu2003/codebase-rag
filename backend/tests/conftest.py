@@ -2,9 +2,13 @@ import os
 import tempfile
 from pathlib import Path
 
-# Point the vector store at a throwaway dir BEFORE any app module is imported,
-# so tests never touch the real ./.chroma. Settings reads this env at import.
-os.environ["CHROMA_DIR"] = tempfile.mkdtemp(prefix="codebase-rag-test-")
+# Point the vector store + code graph at throwaway dirs BEFORE any app module
+# is imported, so tests never touch the real ./.chroma or ./.graph. Settings
+# reads these env vars at import.
+_tmp = tempfile.mkdtemp(prefix="codebase-rag-test-")
+os.environ["CHROMA_DIR"] = _tmp + "/chroma"
+os.environ["GRAPH_DIR"] = _tmp + "/graph"
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")  # quiet chromadb posthog noise
 
 import pytest
 

@@ -16,6 +16,19 @@ class Settings(BaseSettings):
     chroma_dir: str = "./.chroma"
     top_k: int = 8
 
+    # --- graph-aware retrieval ---
+    graph_enabled: bool = True
+    graph_dir: str = "./.graph"        # sqlite code-graph sidecar
+    seed_k: int = 12                   # vector seeds before graph expansion
+    graph_out_cap: int = 3             # max callees/definitions pulled per seed
+    graph_in_cap: int = 2              # max callers pulled per seed
+    graph_decay: float = 0.8           # neighbor score = seed_sim * decay
+
+    # --- token efficiency ---
+    context_token_budget: int = 6000   # hard cap on assembled context (est.)
+    dedup_overlap: float = 0.72        # token-overlap ratio treated as duplicate
+    neighbor_head_lines: int = 25      # head-trim graph-only neighbor chunks
+
     # --- ingest safety limits (this endpoint reads local files) ---
     # If set, only paths inside this directory may be ingested. Empty = any
     # path (fine for a single-user localhost tool; set it if ever exposed).

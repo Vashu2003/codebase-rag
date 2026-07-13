@@ -69,6 +69,14 @@ def test_unsupported_extension_uses_window(tmp_path: Path):
     assert "beta" in chunks[0].text
 
 
+def test_refs_extracted_from_calls(tmp_path: Path):
+    f = tmp_path / "s.py"
+    f.write_text("def total():\n    return add(1, 2)\n")
+    total = next(c for c in chunk_file(tmp_path, f) if c.symbol == "total")
+    assert "add" in total.refs          # references the called function
+    assert "total" not in total.refs    # a chunk doesn't reference its own name
+
+
 def test_unreadable_file_returns_empty(tmp_path: Path):
     missing = tmp_path / "nope.py"  # never created
     assert chunk_file(tmp_path, missing) == []

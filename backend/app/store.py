@@ -70,3 +70,11 @@ def query(repo: str, embedding, top_k: int):
         n_results=top_k,
         include=["documents", "metadatas", "distances"],
     )
+
+
+def get_by_ids(repo: str, ids: list[str]) -> dict[str, str]:
+    """Fetch chunk texts by id (used to hydrate graph neighbors). id -> document."""
+    if not ids:
+        return {}
+    res = collection(repo).get(ids=ids, include=["documents"])
+    return dict(zip(res.get("ids", []), res.get("documents", [])))

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import store
+from . import graph, store
 from .chunker import chunk_file
 from .config import settings
 from .embeddings import embed
@@ -66,12 +66,19 @@ def ingest_repo(path: str, repo: str) -> IngestResponse:
         raise ValueError(f"repo exceeds max_total_bytes ({settings.max_total_bytes})")
 
     store.reset(repo)  # fresh index on re-ingest
+    if settings.graph_enabled:
+        graph.reset(repo)
 
     ids: list[str] = []
     docs: list[str] = []
     metas: list[dict] = []
     files_indexed = 0
     total_chunks = 0
+
+    # graph accumulation: node rows, symbol->definers, and per-chunk references
+    nodes: list[dict] = []
+    defs: dict[str, list[str]] = {}
+    chunk_refs: list[tuple[str, list[str]]] = []
 
     def flush():
         nonlocal ids, docs, metas
@@ -88,7 +95,8 @@ def ingest_repo(path: str, repo: str) -> IngestResponse:
         files_indexed += 1
         for i, ch in enumerate(chunks):
             total_chunks += 1
-            ids.append(f"{ch.file}:{ch.start_line}:{i}")
+            cid = f"{ch.file}:{ch.start_line}:{i}"
+            ids.append(cid)
             docs.append(ch.text)
             metas.append({
                 "repo": repo,
@@ -97,12 +105,42 @@ def ingest_repo(path: str, repo: str) -> IngestResponse:
                 "end_line": ch.end_line,
                 "symbol": ch.symbol or "",
             })
+            if settings.graph_enabled:
+                nodes.append({
+                    "id": cid, "file": ch.file, "start_line": ch.start_line,
+                    "end_line": ch.end_line, "symbol": ch.symbol or "",
+                })
+                if ch.symbol:
+                    defs.setdefault(ch.symbol, []).append(cid)
+                chunk_refs.append((cid, ch.refs))
             if len(ids) >= BATCH:
                 flush()
     flush()
+
+    if settings.graph_enabled:
+        _persist_graph(repo, nodes, defs, chunk_refs)
 
     return IngestResponse(
         repo=repo,
         files_indexed=files_indexed,
         chunks_indexed=total_chunks,
     )
+
+
+def _persist_graph(repo, nodes, defs, chunk_refs) -> None:
+    """Resolve references to definitions within this repo and store the graph.
+
+    An edge src -> dst means chunk `src` references a symbol that chunk `dst`
+    defines. Only references that resolve to a real in-repo definition become
+    edges, which filters out builtins and unknown names.
+    """
+    edges: list[tuple[str, str]] = []
+    for cid, refs in chunk_refs:
+        seen: set[str] = set()
+        for name in refs:
+            for dst in defs.get(name, ()):
+                if dst != cid and dst not in seen:
+                    seen.add(dst)
+                    edges.append((cid, dst))
+    graph.add_nodes(repo, nodes)
+    graph.add_edges(repo, edges)

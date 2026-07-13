@@ -21,6 +21,10 @@ def capture(monkeypatch):
             {"ids": ids, "metas": metadatas, "docs": documents}
         ),
     )
+    # graph persistence is exercised in test_graph/test_ingest_graph; no-op here
+    monkeypatch.setattr(ingest_mod.graph, "reset", lambda repo: None)
+    monkeypatch.setattr(ingest_mod.graph, "add_nodes", lambda repo, rows: None)
+    monkeypatch.setattr(ingest_mod.graph, "add_edges", lambda repo, edges, kind="ref": None)
     return {"added": added, "reset": reset_calls}
 
 
@@ -31,10 +35,11 @@ def test_indexes_only_supported_source(sample_repo: Path, capture):
     assert "calc.py" in files
     assert "app.ts" in files
     assert "README.md" in files
+    assert "service.py" in files
     # node_modules skipped, unsupported extension skipped
     assert not any("node_modules" in f for f in files)
     assert "notes.txt" not in files
-    assert res.files_indexed == 3
+    assert res.files_indexed == 4
 
 
 def test_reset_called_for_fresh_reingest(sample_repo: Path, capture):

@@ -6,7 +6,8 @@ Each chunk keeps its file + line span so answers can cite file:line.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -66,6 +67,11 @@ WINDOW = 60
 OVERLAP = 10
 
 
+# identifier-family leaf node types worth treating as references
+_IDENT_TYPES = {"identifier", "type_identifier", "field_identifier", "constant"}
+_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
 @dataclass
 class Chunk:
     file: str            # repo-relative path
@@ -73,6 +79,24 @@ class Chunk:
     end_line: int
     symbol: str | None
     text: str
+    refs: list[str] = field(default_factory=list)  # symbols this chunk references
+
+
+def _identifiers(node, raw: bytes) -> list[str]:
+    """Collect identifier-family tokens in a node's subtree (for AST chunks)."""
+    out: list[str] = []
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.type in _IDENT_TYPES and not n.children:
+            out.append(raw[n.start_byte:n.end_byte].decode("utf8", "replace"))
+        stack.extend(n.children)
+    return out
+
+
+def _regex_identifiers(text: str) -> list[str]:
+    """Cheap identifier scan for window chunks that have no AST."""
+    return [t for t in _IDENT_RE.findall(text) if len(t) > 1]
 
 
 def _symbol_name(node, src: bytes) -> str | None:
@@ -90,12 +114,14 @@ def _window_chunks(rel: str, lines: list[str], base: int = 0) -> list[Chunk]:
         if not "".join(seg).strip():
             i += WINDOW - OVERLAP
             continue
+        text = "".join(seg)
         out.append(Chunk(
             file=rel,
             start_line=base + i + 1,
             end_line=base + i + len(seg),
             symbol=None,
-            text="".join(seg),
+            text=text,
+            refs=_regex_identifiers(text),
         ))
         i += WINDOW - OVERLAP
     return out
@@ -133,12 +159,15 @@ def chunk_file(root: Path, path: Path) -> list[Chunk]:
                 sub = body.splitlines(keepends=True)
                 chunks.extend(_window_chunks(rel, sub, base=start))
             else:
+                name = _symbol_name(node, raw)
+                refs = [i for i in _identifiers(node, raw) if i != name]
                 chunks.append(Chunk(
                     file=rel,
                     start_line=start + 1,
                     end_line=end + 1,
-                    symbol=_symbol_name(node, raw),
+                    symbol=name,
                     text=body,
+                    refs=refs,
                 ))
             return  # don't descend into an already-captured symbol
         for c in node.children:

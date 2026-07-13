@@ -20,6 +20,9 @@ def mock_store(monkeypatch):
         "add",
         lambda repo, ids, embeddings, documents, metadatas: added.extend(metadatas),
     )
+    monkeypatch.setattr(ingest_mod.graph, "reset", lambda repo: None)
+    monkeypatch.setattr(ingest_mod.graph, "add_nodes", lambda repo, rows: None)
+    monkeypatch.setattr(ingest_mod.graph, "add_edges", lambda repo, edges, kind="ref": None)
     return added
 
 
