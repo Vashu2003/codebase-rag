@@ -20,7 +20,10 @@ def _get_client():
     (keeps server boot + tests fast, and lets tests point CHROMA_DIR at a tmp)."""
     global _client
     if _client is None:
-        _client = chromadb.PersistentClient(path=settings.chroma_dir)
+        _client = chromadb.PersistentClient(
+            path=settings.chroma_dir,
+            settings=chromadb.Settings(anonymized_telemetry=False),
+        )
     return _client
 
 
