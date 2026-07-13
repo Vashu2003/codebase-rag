@@ -15,12 +15,13 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
 
   async function onIngest() {
-    if (!repo || !path) return;
+    if (!path) return;
     setBusy(true);
-    setStatus("Indexing… (first run downloads the embedding model)");
+    setStatus("Indexing… (cloning if a URL; first run downloads the models)");
     try {
       const r = await ingest(path, repo);
-      setStatus(`Indexed ${r.files_indexed} files, ${r.chunks_indexed} chunks.`);
+      setRepo(r.repo); // derived from the URL when not given — ready to query
+      setStatus(`Indexed “${r.repo}”: ${r.files_indexed} files, ${r.chunks_indexed} chunks.`);
     } catch (e) {
       setStatus(`Error: ${(e as Error).message}`);
     } finally {
@@ -62,13 +63,13 @@ export default function Home() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             className="flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-neutral-600"
-            placeholder="repo name (e.g. fastapi)"
+            placeholder="repo name (optional for URLs)"
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
           />
           <input
             className="flex-[2] rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-sm outline-none focus:border-neutral-600"
-            placeholder="/absolute/path/to/repo"
+            placeholder="https://github.com/owner/repo  ·  or /local/path"
             value={path}
             onChange={(e) => setPath(e.target.value)}
           />

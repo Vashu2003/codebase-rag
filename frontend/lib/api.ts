@@ -53,8 +53,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export const ingest = (path: string, repo: string) =>
-  post<IngestResponse>("/ingest", { path, repo });
+// `source` is a GitHub URL (cloned server-side) or a local path. For a URL the
+// repo name is optional — the backend derives it from the URL.
+export const ingest = (source: string, repo: string) => {
+  const body = /^https?:\/\//.test(source)
+    ? { url: source, repo: repo || undefined }
+    : { path: source, repo };
+  return post<IngestResponse>("/ingest", body);
+};
 
 export const query = (repo: string, question: string) =>
   post<QueryResponse>("/query", { repo, question });

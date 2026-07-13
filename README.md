@@ -96,7 +96,7 @@ npm run dev            # http://localhost:3000
 
 ### 3. Try it
 
-1. **Index a repo** — give it a name + an absolute local path (e.g. clone FastAPI: `git clone https://github.com/fastapi/fastapi`).
+1. **Index a repo** — paste a **GitHub URL** (`https://github.com/owner/repo`, cloned server-side) or a local path. The repo name is derived from the URL.
 2. **Ask** — _"Explain how dependency injection is resolved."_ Watch it answer with exact `file:line` cites.
 
 ---
@@ -105,7 +105,7 @@ npm run dev            # http://localhost:3000
 
 | Method | Route | Body | Returns |
 |---|---|---|---|
-| `POST` | `/ingest` | `{ path, repo }` | `{ files_indexed, chunks_indexed }` |
+| `POST` | `/ingest` | `{ url \| path, repo? }` | `{ repo, files_indexed, chunks_indexed }` |
 | `POST` | `/query` | `{ repo, question, top_k? }` | `{ answer, citations[] }` |
 | `GET` | `/health` | — | `{ status, llm_provider }` |
 
@@ -139,9 +139,9 @@ This is a **single-user, localhost developer tool** — treat that as the trust 
 - [x] **Call-site-aware edges** — only call callees + type references become edges (not bare identifiers), dropping attribute/prose false edges (fixture: 4 edges → 1, all noise removed).
 - [x] **Cross-encoder reranking** — `bge-reranker-base` re-scores the merged pool on true `(question, chunk)` relevance before the budget.
 - [ ] Full scope/binding resolution (shadowing, import-qualified names) to disambiguate same-named symbols across files.
+- [x] **Ingest straight from a GitHub URL** — paste a URL, cloned + indexed server-side (HTTPS + host-allowlisted, hardened clone).
 - [ ] Streaming answers.
 - [ ] Clickable citations that open the exact line.
-- [ ] Ingest straight from a GitHub URL.
 
 ## License
 
