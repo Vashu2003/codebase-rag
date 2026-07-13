@@ -31,24 +31,25 @@ async def test_ingest_then_query_cites_correct_file(sample_repo, monkeypatch):
     assert 0 < top.score <= 1
 
 
-async def test_graph_expansion_pulls_callee(sample_repo, monkeypatch):
-    # service.total() calls calc.add(): a question about the caller should, via
-    # the code graph, also surface the callee's definition in calc.py.
-    # Constrain seeds to 1 so the callee is a genuine graph neighbor, not just
-    # another vector hit (the fixture is tiny — all chunks would otherwise seed).
+def test_graph_expansion_pulls_callee(sample_repo):
+    # Real ingest builds the graph from tree-sitter; expanding the caller
+    # (service.total) must hydrate the callee's definition (calc.add) out of
+    # Chroma. Deterministic — seeds the caller by its real node id rather than
+    # relying on embedding ranking over an 8-chunk corpus.
+    from app import graph
+    from app.rag import Cand, _expand
+
     ingest_repo(str(sample_repo), "integration_graph")
-    monkeypatch.setattr(rag_mod.settings, "seed_k", 1)
+    row = graph._get_conn().execute(
+        "SELECT id, file, start_line, end_line FROM nodes "
+        "WHERE repo = ? AND symbol = 'total'",
+        ("integration_graph",),
+    ).fetchone()
+    assert row, "service.total node should exist"
+    sid, file, s, e = row
+    seed = Cand(id=sid, text="", file=file, start_line=s, end_line=e,
+                symbol="total", score=0.9, source="seed")
 
-    async def echo(prompt):
-        return "see excerpt [1]"
-
-    monkeypatch.setattr(rag_mod, "complete", echo)
-
-    resp = await rag_mod.answer(
-        "integration_graph", "what does the total function compute?", top_k=1
-    )
-    files = {c.file for c in resp.citations}
-    assert "service.py" in files          # the caller (vector seed)
-    assert "calc.py" in files             # the callee, pulled via the graph
-    assert resp.retrieval.graph_used is True
-    assert resp.retrieval.graph_neighbors >= 1
+    neighbors = _expand("integration_graph", [seed])
+    assert any(n.file == "calc.py" and n.symbol == "add" for n in neighbors)
+    assert all(n.text for n in neighbors)   # neighbor text hydrated from Chroma

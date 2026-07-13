@@ -25,7 +25,7 @@ question ──▶ [embed] ──▶│                                        �
                                               (Ollama local · or Gemini free)
 ```
 
-1. **Ingest** — walk a repo, chunk it *AST-aware* (functions/classes via tree-sitter). Embed each chunk into Chroma **and** build a code graph (SQLite): an edge means "this chunk references a symbol that chunk defines".
+1. **Ingest** — walk a repo, chunk it *AST-aware* (functions/classes via tree-sitter). Embed each chunk into Chroma **and** build a code graph (SQLite): an edge means "this chunk *calls* a symbol that chunk defines". Edges are **call-site aware** — only call callees (`add(...)`, `obj.method()`) and type references count, never bare attribute reads/assignments or prose, so `self.total` doesn't forge a false edge to a `total()` function.
 2. **Retrieve (graph-aware)** — vector-search for seed chunks, then expand 1 hop along the graph to pull each seed's **callees/definitions and callers** — so an answer about a function also sees what it calls and what calls it, not just text-similar code.
 3. **Compress (token-efficient)** — semantic dedup + a fixed token budget (see below) keep the prompt small; graph neighbors *replace* redundant vector hits rather than inflating it.
 4. **Generate** — feed the assembled context to the LLM with a strict "cite every claim, don't guess" prompt.
@@ -43,11 +43,11 @@ Measured on FastAPI's own source (question: *"how does dependency injection reso
 | Stage | ~tokens | chunks |
 |---|--:|--:|
 | naive vector top-12 | 5,719 | 12 |
-| **naive graph expansion** (+22 neighbors, full text) | **13,065** | 34 |
-| + semantic dedup | 9,962 | 28 |
-| **+ budget + head-trim (shipped)** | **5,999** | 26 |
+| **naive graph expansion** (+14 neighbors, full text) | **11,148** | 26 |
+| + semantic dedup | 8,898 | 22 |
+| **+ budget + head-trim (shipped)** | **5,956** | 21 |
 
-→ **~54% fewer tokens than naive graph expansion**, while still delivering 26 structurally-relevant chunks (call-graph neighbors included) in about the same budget as plain vector top-12. Graph context, essentially for free.
+→ **~46% fewer tokens than naive graph expansion**, while still delivering 21 structurally-relevant chunks (call-graph neighbors included) in about the same budget as plain vector top-12. Graph context, essentially for free.
 
 The `/query` response reports `{seeds, graph_neighbors, after_dedup, est_tokens, graph_used}`, and the UI shows *"retrieved N chunks · ~T tokens · expanded via call-graph"* so the effect is visible.
 
@@ -134,7 +134,8 @@ This is a **single-user, localhost developer tool** — treat that as the trust 
 
 - [x] **Graph-aware retrieval** — fuse call-graph proximity (callers/callees) with vector similarity for sharper context.
 - [x] **Token-efficient context** — semantic dedup + fixed token budget + neighbor head-trim.
-- [ ] Precise call-site edge resolution (scope-aware, beyond name matching) to drop the few over-connected edges.
+- [x] **Call-site-aware edges** — only call callees + type references become edges (not bare identifiers), dropping attribute/prose false edges (fixture: 4 edges → 1, all noise removed).
+- [ ] Full scope/binding resolution (shadowing, import-qualified names) to disambiguate same-named symbols across files.
 - [ ] Reranker (`bge-reranker-base`) to cut noise before the LLM.
 - [ ] Streaming answers.
 - [ ] Clickable citations that open the exact line.

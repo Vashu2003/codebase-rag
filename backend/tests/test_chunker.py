@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from app.chunker import chunk_file
+from app.chunker import _regex_references, chunk_file
+
+
+def test_regex_references_are_call_sites_only():
+    # window chunks (markdown/prose) must not turn plain words into references
+    assert _regex_references("The Calculator module documents add and total.") == []
+    assert set(_regex_references("result = compute(x) + helper()")) == {"compute", "helper"}
 
 
 def test_python_ast_symbols_and_spans(sample_repo: Path):
@@ -75,6 +81,37 @@ def test_refs_extracted_from_calls(tmp_path: Path):
     total = next(c for c in chunk_file(tmp_path, f) if c.symbol == "total")
     assert "add" in total.refs          # references the called function
     assert "total" not in total.refs    # a chunk doesn't reference its own name
+
+
+def test_refs_ignore_attribute_and_variable_reads(tmp_path: Path):
+    # only call callees / types are refs — not attribute assignments or var reads,
+    # so `self.total` must NOT forge an edge to a `total()` function elsewhere
+    f = tmp_path / "s.py"
+    f.write_text(
+        "class C:\n"
+        "    def __init__(self):\n"
+        "        self.total = 0\n"       # attribute assignment, not a call
+        "        color = shade\n"        # bare identifiers, not calls
+    )
+    c = next(ch for ch in chunk_file(tmp_path, f) if ch.symbol == "C")
+    assert "total" not in c.refs
+    assert "shade" not in c.refs
+    assert "color" not in c.refs
+
+
+def test_refs_capture_method_calls(tmp_path: Path):
+    f = tmp_path / "s.py"
+    f.write_text("def run(obj):\n    return obj.save()\n")
+    run = next(c for c in chunk_file(tmp_path, f) if c.symbol == "run")
+    assert "save" in run.refs            # method call is a genuine reference
+
+
+def test_refs_capture_type_references_ts(tmp_path: Path):
+    f = tmp_path / "t.ts"
+    f.write_text("function make(): Widget {\n  return build();\n}\n")
+    make = next(c for c in chunk_file(tmp_path, f) if c.symbol == "make")
+    assert "build" in make.refs          # call
+    assert "Widget" in make.refs         # type reference
 
 
 def test_unreadable_file_returns_empty(tmp_path: Path):

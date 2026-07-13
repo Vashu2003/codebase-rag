@@ -67,9 +67,17 @@ WINDOW = 60
 OVERLAP = 10
 
 
-# identifier-family leaf node types worth treating as references
-_IDENT_TYPES = {"identifier", "type_identifier", "field_identifier", "constant"}
-_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# We treat only CALL CALLEES and TYPE references as graph edges — never bare
+# identifier reads (variables, attribute names, keyword args) or prose. This is
+# what makes edges "call-site aware": an attribute assignment like `self.total`
+# or a docstring word no longer forges an edge to a same-named symbol.
+_CALL_TYPES = {
+    "call", "call_expression", "function_call",
+    "method_invocation", "method_call",
+}
+_TYPE_TYPES = {"type_identifier"}
+_ID_LEAVES = {"identifier", "field_identifier", "type_identifier", "constant"}
+_CALL_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(")   # `name(` call sites
 
 
 @dataclass
@@ -82,21 +90,42 @@ class Chunk:
     refs: list[str] = field(default_factory=list)  # symbols this chunk references
 
 
-def _identifiers(node, raw: bytes) -> list[str]:
-    """Collect identifier-family tokens in a node's subtree (for AST chunks)."""
-    out: list[str] = []
+def _rightmost_id(node, raw: bytes) -> str | None:
+    """Last identifier token in a subtree — the actual callee of `a.b.c()`."""
+    best, best_pos = None, -1
     stack = [node]
     while stack:
         n = stack.pop()
-        if n.type in _IDENT_TYPES and not n.children:
-            out.append(raw[n.start_byte:n.end_byte].decode("utf8", "replace"))
+        if n.type in _ID_LEAVES and not n.children and n.start_byte > best_pos:
+            best_pos = n.start_byte
+            best = raw[n.start_byte:n.end_byte].decode("utf8", "replace")
         stack.extend(n.children)
-    return out
+    return best
 
 
-def _regex_identifiers(text: str) -> list[str]:
-    """Cheap identifier scan for window chunks that have no AST."""
-    return [t for t in _IDENT_RE.findall(text) if len(t) > 1]
+def _references(node, raw: bytes) -> list[str]:
+    """Call callees + type references in a node's subtree (AST chunks)."""
+    refs: set[str] = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.type in _CALL_TYPES:
+            fn = (n.child_by_field_name("function")
+                  or n.child_by_field_name("name")
+                  or n.child_by_field_name("method")
+                  or (n.children[0] if n.children else None))
+            rid = _rightmost_id(fn, raw) if fn is not None else None
+            if rid:
+                refs.add(rid)
+        elif n.type in _TYPE_TYPES and not n.children:
+            refs.add(raw[n.start_byte:n.end_byte].decode("utf8", "replace"))
+        stack.extend(n.children)
+    return list(refs)
+
+
+def _regex_references(text: str) -> list[str]:
+    """Call-site scan for window chunks with no AST — skips prose/attributes."""
+    return list({m for m in _CALL_RE.findall(text) if len(m) > 1})
 
 
 def _symbol_name(node, src: bytes) -> str | None:
@@ -121,7 +150,7 @@ def _window_chunks(rel: str, lines: list[str], base: int = 0) -> list[Chunk]:
             end_line=base + i + len(seg),
             symbol=None,
             text=text,
-            refs=_regex_identifiers(text),
+            refs=_regex_references(text),
         ))
         i += WINDOW - OVERLAP
     return out
@@ -160,7 +189,7 @@ def chunk_file(root: Path, path: Path) -> list[Chunk]:
                 chunks.extend(_window_chunks(rel, sub, base=start))
             else:
                 name = _symbol_name(node, raw)
-                refs = [i for i in _identifiers(node, raw) if i != name]
+                refs = [r for r in _references(node, raw) if r != name]
                 chunks.append(Chunk(
                     file=rel,
                     start_line=start + 1,
