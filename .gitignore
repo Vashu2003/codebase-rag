@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Chroma index / models
+backend/.chroma/
+.cache/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Node / Next
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# Misc
+.DS_Store
+*.log
