@@ -7,6 +7,8 @@ export type Citation = {
   end_line: number;
   symbol: string | null;
   score: number;
+  source: "seed" | "graph";
+  edge: "caller" | "callee" | null;
 };
 
 export type RetrievalStats = {

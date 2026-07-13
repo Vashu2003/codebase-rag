@@ -3,9 +3,26 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 body {
-  @apply bg-neutral-950 text-neutral-100 antialiased;
+  @apply bg-bg font-sans text-ink antialiased;
+  /* faint blueprint dot-grid — the graph made ambient */
+  background-image: radial-gradient(#2a3e63 0.9px, transparent 0.9px);
+  background-size: 22px 22px;
+}
+
+/* visible, on-brand focus for keyboard users */
+*:focus-visible {
+  outline: 2px solid theme("colors.cyan");
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
