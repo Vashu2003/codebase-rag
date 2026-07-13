@@ -9,9 +9,19 @@ export type Citation = {
   score: number;
 };
 
+export type RetrievalStats = {
+  seeds: number;
+  graph_neighbors: number;
+  after_dedup: number;
+  sent: number;
+  est_tokens: number;
+  graph_used: boolean;
+};
+
 export type QueryResponse = {
   answer: string;
   citations: Citation[];
+  retrieval: RetrievalStats | null;
 };
 
 export type IngestResponse = {

@@ -5,9 +5,11 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Chroma index / models (match wherever the server is launched from)
+# Chroma index + code graph (match wherever the server is launched from)
 .chroma/
 **/.chroma/
+.graph/
+**/.graph/
 .cache/
 
 # Env

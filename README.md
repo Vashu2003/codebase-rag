@@ -17,15 +17,39 @@ Runs **fully free & offline**: local embeddings + a local LLM (Ollama), or Gemin
 ## How it works
 
 ```
-question ──▶ [embed: bge-small] ──▶ Chroma vector search ──▶ top-k code chunks
-                                                                   │
-                          answer + file:line citations ◀── [ LLM ] ◀┘
-                                                    (Ollama local · or Gemini free)
+                        ┌─ Chroma vector search ─── seed chunks ─┐
+question ──▶ [embed] ──▶│                                        ├─▶ dedup ─▶ token
+                        └─ code graph 1-hop expansion ─ neighbors┘   budget   budget
+                                (callers + callees)                     │
+                            answer + file:line citations ◀── [ LLM ] ◀──┘
+                                              (Ollama local · or Gemini free)
 ```
 
-1. **Ingest** — walk a repo, chunk it *AST-aware* (functions/classes via tree-sitter, not blind line splits), embed each chunk, store in Chroma.
-2. **Retrieve** — embed the question, cosine-search the repo's collection for the most relevant chunks.
-3. **Generate** — feed those chunks to the LLM with a strict "cite every claim, don't guess" prompt.
+1. **Ingest** — walk a repo, chunk it *AST-aware* (functions/classes via tree-sitter). Embed each chunk into Chroma **and** build a code graph (SQLite): an edge means "this chunk references a symbol that chunk defines".
+2. **Retrieve (graph-aware)** — vector-search for seed chunks, then expand 1 hop along the graph to pull each seed's **callees/definitions and callers** — so an answer about a function also sees what it calls and what calls it, not just text-similar code.
+3. **Compress (token-efficient)** — semantic dedup + a fixed token budget (see below) keep the prompt small; graph neighbors *replace* redundant vector hits rather than inflating it.
+4. **Generate** — feed the assembled context to the LLM with a strict "cite every claim, don't guess" prompt.
+
+## Token efficiency
+
+Context is treated as a **fixed budget**, not "top-k whatever". Three levers, following the RAG context-compression literature:
+
+- **Semantic dedup** — vector hits often repeat (2–3 of the top-10 say the same thing). A three-tier check (exact containment · same-file line overlap · token-overlap ≥ 0.72) collapses them.
+- **Hard token budget** — candidates are added by descending relevance until `CONTEXT_TOKEN_BUDGET` (~6k) is hit; the top hit always survives.
+- **Neighbor head-trim** — graph-only neighbors contribute their signature + first lines, not the whole body.
+
+Measured on FastAPI's own source (question: *"how does dependency injection resolve dependencies?"*):
+
+| Stage | ~tokens | chunks |
+|---|--:|--:|
+| naive vector top-12 | 5,719 | 12 |
+| **naive graph expansion** (+22 neighbors, full text) | **13,065** | 34 |
+| + semantic dedup | 9,962 | 28 |
+| **+ budget + head-trim (shipped)** | **5,999** | 26 |
+
+→ **~54% fewer tokens than naive graph expansion**, while still delivering 26 structurally-relevant chunks (call-graph neighbors included) in about the same budget as plain vector top-12. Graph context, essentially for free.
+
+The `/query` response reports `{seeds, graph_neighbors, after_dedup, est_tokens, graph_used}`, and the UI shows *"retrieved N chunks · ~T tokens · expanded via call-graph"* so the effect is visible.
 
 ## Stack
 
@@ -35,7 +59,8 @@ question ──▶ [embed: bge-small] ──▶ Chroma vector search ──▶ t
 | Chunking | tree-sitter (AST-aware) | ✅ |
 | Embeddings | `bge-small-en-v1.5` (sentence-transformers, local) | ✅ |
 | Vector DB | Chroma (embedded, on-disk) | ✅ |
-| Answer LLM | Ollama `qwen2.5-coder:7b` **or** Gemini `2.0-flash` free tier | ✅ |
+| Code graph | SQLite (stdlib — no dependency) | ✅ |
+| Answer LLM | Ollama `qwen2.5-coder:7b` **or** Gemini free tier | ✅ |
 | Frontend | Next.js 15 + Tailwind | ✅ |
 
 ---
@@ -107,7 +132,9 @@ This is a **single-user, localhost developer tool** — treat that as the trust 
 
 ## Roadmap
 
-- [ ] **Graph-aware retrieval** — fuse call-graph proximity (callers/callees) with vector similarity for sharper context.
+- [x] **Graph-aware retrieval** — fuse call-graph proximity (callers/callees) with vector similarity for sharper context.
+- [x] **Token-efficient context** — semantic dedup + fixed token budget + neighbor head-trim.
+- [ ] Precise call-site edge resolution (scope-aware, beyond name matching) to drop the few over-connected edges.
 - [ ] Reranker (`bge-reranker-base`) to cut noise before the LLM.
 - [ ] Streaming answers.
 - [ ] Clickable citations that open the exact line.

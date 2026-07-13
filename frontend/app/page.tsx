@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ingest, query, type Citation } from "@/lib/api";
+import { ingest, query, type Citation, type RetrievalStats } from "@/lib/api";
 
 export default function Home() {
   const [repo, setRepo] = useState("");
@@ -9,6 +9,7 @@ export default function Home() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState<Citation[]>([]);
+  const [retrieval, setRetrieval] = useState<RetrievalStats | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,7 @@ export default function Home() {
       const r = await query(repo, question);
       setAnswer(r.answer);
       setCitations(r.citations);
+      setRetrieval(r.retrieval);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -113,6 +115,12 @@ export default function Home() {
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-100">
             {answer}
           </p>
+          {retrieval && (
+            <p className="mt-3 text-xs text-neutral-500">
+              retrieved {retrieval.sent} chunks · ~{retrieval.est_tokens} tokens
+              {retrieval.graph_used ? " · expanded via call-graph" : ""}
+            </p>
+          )}
           {citations.length > 0 && (
             <ul className="mt-4 space-y-1 border-t border-neutral-800 pt-3">
               {citations.map((c, i) => (
