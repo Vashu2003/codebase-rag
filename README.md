@@ -17,18 +17,19 @@ Runs **fully free & offline**: local embeddings + a local LLM (Ollama), or Gemin
 ## How it works
 
 ```
-                        ┌─ Chroma vector search ─── seed chunks ─┐
-question ──▶ [embed] ──▶│                                        ├─▶ dedup ─▶ token
-                        └─ code graph 1-hop expansion ─ neighbors┘   budget   budget
-                                (callers + callees)                     │
-                            answer + file:line citations ◀── [ LLM ] ◀──┘
-                                              (Ollama local · or Gemini free)
+                     ┌─ vector search ── seeds ─┐
+question ──▶ [embed]▶│                          ├▶ rerank ─▶ dedup ─▶ token
+                     └─ graph 1-hop ─ neighbors─┘  (x-enc)            budget
+                          (callers + callees)                          │
+                       answer + file:line citations ◀────── [ LLM ] ◀──┘
+                                          (Ollama local · or Gemini free)
 ```
 
 1. **Ingest** — walk a repo, chunk it *AST-aware* (functions/classes via tree-sitter). Embed each chunk into Chroma **and** build a code graph (SQLite): an edge means "this chunk *calls* a symbol that chunk defines". Edges are **call-site aware** — only call callees (`add(...)`, `obj.method()`) and type references count, never bare attribute reads/assignments or prose, so `self.total` doesn't forge a false edge to a `total()` function.
 2. **Retrieve (graph-aware)** — vector-search for seed chunks, then expand 1 hop along the graph to pull each seed's **callees/definitions and callers** — so an answer about a function also sees what it calls and what calls it, not just text-similar code.
-3. **Compress (token-efficient)** — semantic dedup + a fixed token budget (see below) keep the prompt small; graph neighbors *replace* redundant vector hits rather than inflating it.
-4. **Generate** — feed the assembled context to the LLM with a strict "cite every claim, don't guess" prompt.
+3. **Rerank** — a cross-encoder (`bge-reranker`) re-scores the merged seed+neighbor pool on real `(question, chunk)` relevance. Bi-encoder embeddings judge each chunk in isolation (fast, coarse); the cross-encoder reads question and chunk *together* (slow, precise) — so a genuinely-relevant graph neighbor can outrank a weak vector seed instead of riding a `score × decay` guess.
+4. **Compress (token-efficient)** — semantic dedup + a fixed token budget (see below) keep the prompt small; graph neighbors *replace* redundant vector hits rather than inflating it.
+5. **Generate** — feed the assembled context to the LLM with a strict "cite every claim, don't guess" prompt.
 
 ## Token efficiency
 
@@ -60,6 +61,7 @@ The `/query` response reports `{seeds, graph_neighbors, after_dedup, est_tokens,
 | Embeddings | `bge-small-en-v1.5` (sentence-transformers, local) | ✅ |
 | Vector DB | Chroma (embedded, on-disk) | ✅ |
 | Code graph | SQLite (stdlib — no dependency) | ✅ |
+| Reranker | `bge-reranker-base` cross-encoder (local, optional) | ✅ |
 | Answer LLM | Ollama `qwen2.5-coder:7b` **or** Gemini free tier | ✅ |
 | Frontend | Next.js 15 + Tailwind | ✅ |
 
@@ -135,8 +137,8 @@ This is a **single-user, localhost developer tool** — treat that as the trust 
 - [x] **Graph-aware retrieval** — fuse call-graph proximity (callers/callees) with vector similarity for sharper context.
 - [x] **Token-efficient context** — semantic dedup + fixed token budget + neighbor head-trim.
 - [x] **Call-site-aware edges** — only call callees + type references become edges (not bare identifiers), dropping attribute/prose false edges (fixture: 4 edges → 1, all noise removed).
+- [x] **Cross-encoder reranking** — `bge-reranker-base` re-scores the merged pool on true `(question, chunk)` relevance before the budget.
 - [ ] Full scope/binding resolution (shadowing, import-qualified names) to disambiguate same-named symbols across files.
-- [ ] Reranker (`bge-reranker-base`) to cut noise before the LLM.
 - [ ] Streaming answers.
 - [ ] Clickable citations that open the exact line.
 - [ ] Ingest straight from a GitHub URL.

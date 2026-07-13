@@ -119,6 +119,7 @@ export default function Home() {
             <p className="mt-3 text-xs text-neutral-500">
               retrieved {retrieval.sent} chunks · ~{retrieval.est_tokens} tokens
               {retrieval.graph_used ? " · expanded via call-graph" : ""}
+              {retrieval.reranked ? " · reranked" : ""}
             </p>
           )}
           {citations.length > 0 && (

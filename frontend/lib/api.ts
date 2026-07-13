@@ -16,6 +16,7 @@ export type RetrievalStats = {
   sent: number;
   est_tokens: number;
   graph_used: boolean;
+  reranked: boolean;
 };
 
 export type QueryResponse = {
