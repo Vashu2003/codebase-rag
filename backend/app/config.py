@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     graph_in_cap: int = 2              # max callers pulled per seed
     graph_decay: float = 0.8           # neighbor score = seed_sim * decay
 
+    # --- reranking (cross-encoder over the merged candidate pool) ---
+    rerank_enabled: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"
+    # rerank at most this many candidates (latency cap). Sized to cover the
+    # worst-case pool (seed_k + seed_k*(out_cap+in_cap)) so the cross-encoder,
+    # not the pre-rerank cosine/decay heuristic, decides what wins.
+    rerank_pool: int = 80
+
     # --- token efficiency ---
     context_token_budget: int = 6000   # hard cap on assembled context (est.)
     dedup_overlap: float = 0.72        # token-overlap ratio treated as duplicate

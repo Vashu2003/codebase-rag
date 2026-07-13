@@ -53,3 +53,19 @@ def test_graph_expansion_pulls_callee(sample_repo):
     neighbors = _expand("integration_graph", [seed])
     assert any(n.file == "calc.py" and n.symbol == "add" for n in neighbors)
     assert all(n.text for n in neighbors)   # neighbor text hydrated from Chroma
+
+
+async def test_reranker_runs_end_to_end(sample_repo, monkeypatch):
+    # real cross-encoder (downloads bge-reranker-base once) over a real ingest
+    monkeypatch.setattr(rag_mod.settings, "rerank_enabled", True)
+    ingest_repo(str(sample_repo), "integration_rerank")
+
+    async def echo(prompt):
+        return "see [1]"
+
+    monkeypatch.setattr(rag_mod, "complete", echo)
+    resp = await rag_mod.answer("integration_rerank", "how does add sum two numbers?", None)
+    assert resp.retrieval.reranked is True
+    assert all(0.0 <= c.score <= 1.0 for c in resp.citations)   # sigmoid scores
+    # the add() definition should rank into the top results after reranking
+    assert any(c.symbol == "add" for c in resp.citations[:3])

@@ -1,9 +1,11 @@
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import rag
+from . import embeddings, rag, reranker
 from .config import settings
 from .ingest import ingest_repo
 from .models import (
@@ -15,7 +17,27 @@ from .models import (
 
 log = logging.getLogger("codebase_rag")
 
-app = FastAPI(title="codebase-rag", version="0.1.0")
+
+def _warm_models() -> None:
+    """Load the embedding (and, if enabled, reranker) models so the FIRST query
+    doesn't pay the download/load. Runs in a daemon thread — startup stays
+    instant and the server serves /health immediately while models load."""
+    try:
+        embeddings._model()
+        if settings.rerank_enabled:
+            reranker._model()
+        log.info("models warmed")
+    except Exception:
+        log.exception("model warmup failed (will lazy-load on first query)")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_warm_models, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="codebase-rag", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -157,6 +157,30 @@ def test_graph_neighbor_is_merged(monkeypatch):
     assert neighbor.score == pytest.approx(0.8 * rag_mod.settings.graph_decay)
 
 
+def test_retrieve_applies_reranking(monkeypatch):
+    monkeypatch.setattr(rag_mod.settings, "rerank_enabled", True)
+    monkeypatch.setattr(rag_mod, "embed_one", lambda q: [0.0])
+    monkeypatch.setattr(
+        rag_mod.store, "query",
+        lambda repo, emb, k: _qresult(
+            ["off-topic but similar", "the real answer"],
+            [_meta("a.py", 1, 2), _meta("b.py", 3, 4)],
+            [0.1, 0.5],   # a.py has the better vector score
+        ),
+    )
+
+    def fake_rerank(question, cands):
+        for c in cands:                 # cross-encoder prefers b.py
+            c.score = 0.99 if c.file == "b.py" else 0.01
+        cands.sort(key=lambda c: c.score, reverse=True)
+        return cands
+
+    monkeypatch.setattr(rag_mod.reranker, "rerank", fake_rerank)
+    kept, stats = rag_mod._retrieve("r", "q", 5)
+    assert stats.reranked is True
+    assert kept[0].file == "b.py"       # reranker order wins over vector order
+
+
 async def test_answer_returns_citations_and_stats(monkeypatch):
     monkeypatch.setattr(rag_mod, "embed_one", lambda q: [0.0])
     monkeypatch.setattr(
@@ -175,6 +199,7 @@ async def test_answer_returns_citations_and_stats(monkeypatch):
     c = resp.citations[0]
     assert c.file == "calc.py" and c.start_line == 6 and c.symbol == "add"
     assert resp.retrieval.seeds == 1
+    assert resp.retrieval.reranked is False   # disabled in tests by default
 
 
 async def test_top_k_is_clamped(monkeypatch):

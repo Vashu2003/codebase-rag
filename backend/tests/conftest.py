@@ -9,6 +9,9 @@ _tmp = tempfile.mkdtemp(prefix="codebase-rag-test-")
 os.environ["CHROMA_DIR"] = _tmp + "/chroma"
 os.environ["GRAPH_DIR"] = _tmp + "/graph"
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")  # quiet chromadb posthog noise
+# default reranking OFF in tests (keeps them fast + deterministic, no 1GB model
+# download); rerank-specific tests opt back in and mock or use the real model.
+os.environ["RERANK_ENABLED"] = "false"
 
 import pytest
 

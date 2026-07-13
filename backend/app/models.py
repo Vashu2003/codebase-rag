@@ -12,6 +12,8 @@ class Citation(BaseModel):
     start_line: int
     end_line: int
     symbol: str | None = None
+    # 0-1 relevance: cross-encoder rerank score when reranking is on,
+    # else clamped cosine similarity. See RetrievalStats.reranked.
     score: float
 
 
@@ -30,6 +32,7 @@ class RetrievalStats(BaseModel):
     sent: int               # chunks actually placed in the prompt (post-budget)
     est_tokens: int         # estimated context tokens (chunk bodies + framing)
     graph_used: bool        # did a graph neighbor survive into the context
+    reranked: bool          # was the candidate pool cross-encoder reranked
 
 
 class QueryResponse(BaseModel):

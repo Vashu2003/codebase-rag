@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from starlette.concurrency import run_in_threadpool
 
-from . import graph, store
+from . import graph, reranker, store
 from .config import settings
 from .embeddings import embed_one
 from .llm import complete
@@ -117,6 +117,8 @@ def _expand(repo: str, seeds: list[Cand]) -> list[Cand]:
             continue
         # score off the specific seed that pulled this neighbor (× decay), so a
         # neighbor of a weak seed can't outrank — and evict — a stronger seed.
+        # (This heuristic is the ranking only when reranking is OFF; the
+        # cross-encoder overwrites it when enabled.)
         parent = seed_score.get(r.get("via"), fallback)
         out.append(Cand(
             id=r["id"], text=text, file=r["file"],
@@ -180,9 +182,19 @@ def _retrieve(repo: str, question: str, k: int) -> tuple[list[Cand], RetrievalSt
     seeds = _seeds(repo, question, max(k, settings.seed_k))
     if not seeds:
         return [], RetrievalStats(seeds=0, graph_neighbors=0, after_dedup=0,
-                                  sent=0, est_tokens=0, graph_used=False)
+                                  sent=0, est_tokens=0, graph_used=False,
+                                  reranked=False)
     neighbors = _expand(repo, seeds)
-    deduped = _dedup(seeds + neighbors)
+    pool = seeds + neighbors
+    # rerank the merged pool so graph neighbors compete with seeds on real
+    # (question, chunk) relevance rather than the pre-rerank cosine/decay score.
+    # The pool is capped first (by that pre-rerank score) only to bound
+    # cross-encoder latency; rerank_pool is sized so the cap rarely bites.
+    reranked = settings.rerank_enabled
+    if reranked:
+        pool.sort(key=lambda c: c.score, reverse=True)
+        pool = reranker.rerank(question, pool[:settings.rerank_pool])
+    deduped = _dedup(pool)
     kept, used = _fit_budget(deduped)
     stats = RetrievalStats(
         seeds=len(seeds),
@@ -191,6 +203,7 @@ def _retrieve(repo: str, question: str, k: int) -> tuple[list[Cand], RetrievalSt
         sent=len(kept),
         est_tokens=used,
         graph_used=any(c.source == "graph" for c in kept),
+        reranked=reranked,
     )
     return kept, stats
 
@@ -224,8 +237,9 @@ async def answer(repo: str, question: str, top_k: int | None) -> QueryResponse:
         for c in kept
     ]
     log.info(
-        "retrieval repo=%s seeds=%d neighbors=%d dedup=%d sent=%d est_tokens=%d graph=%s",
+        "retrieval repo=%s seeds=%d neighbors=%d dedup=%d sent=%d est_tokens=%d "
+        "graph=%s reranked=%s",
         repo, stats.seeds, stats.graph_neighbors, stats.after_dedup,
-        stats.sent, stats.est_tokens, stats.graph_used,
+        stats.sent, stats.est_tokens, stats.graph_used, stats.reranked,
     )
     return QueryResponse(answer=text, citations=citations, retrieval=stats)
