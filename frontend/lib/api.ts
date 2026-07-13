@@ -27,8 +27,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.detail ?? `Request failed (${res.status})`);
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail;
+    // FastAPI sends a string detail for HTTPException but an array of error
+    // objects for 422 validation errors — stringify the latter so it's readable.
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : `Request failed (${res.status})`;
+    throw new Error(message);
   }
   return res.json();
 }

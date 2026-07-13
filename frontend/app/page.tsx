@@ -10,6 +10,7 @@ export default function Home() {
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState<Citation[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onIngest() {
@@ -31,12 +32,13 @@ export default function Home() {
     setBusy(true);
     setAnswer("");
     setCitations([]);
+    setError(null);
     try {
       const r = await query(repo, question);
       setAnswer(r.answer);
       setCitations(r.citations);
     } catch (e) {
-      setAnswer(`Error: ${(e as Error).message}`);
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -97,6 +99,13 @@ export default function Home() {
           {busy ? "Thinking…" : "Ask"}
         </button>
       </section>
+
+      {/* Error */}
+      {error && (
+        <section className="rounded-lg border border-red-900/60 bg-red-950/30 p-4">
+          <p className="text-sm text-red-300">{error}</p>
+        </section>
+      )}
 
       {/* Answer */}
       {answer && (

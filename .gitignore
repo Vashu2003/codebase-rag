@@ -5,8 +5,9 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Chroma index / models
-backend/.chroma/
+# Chroma index / models (match wherever the server is launched from)
+.chroma/
+**/.chroma/
 .cache/
 
 # Env
@@ -19,7 +20,11 @@ node_modules/
 .next/
 out/
 next-env.d.ts
+# ...but keep the test fixture that proves node_modules is skipped on ingest
+!backend/tests/fixtures/sample_repo/node_modules/
+!backend/tests/fixtures/sample_repo/node_modules/**
 
 # Misc
 .DS_Store
 *.log
+.demo/
