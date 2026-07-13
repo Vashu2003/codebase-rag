@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
-    path: str          # absolute path to a local repo checkout
-    repo: str          # logical name used to namespace the collection
+    path: str = Field(min_length=1)          # local repo checkout path
+    repo: str = Field(min_length=1, max_length=200)  # namespaces the collection
 
 
 class Citation(BaseModel):
@@ -16,9 +16,9 @@ class Citation(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    repo: str
-    question: str
-    top_k: int | None = None
+    repo: str = Field(min_length=1, max_length=200)
+    question: str = Field(min_length=1, max_length=4000)
+    top_k: int | None = Field(default=None, ge=1, le=100)
 
 
 class QueryResponse(BaseModel):

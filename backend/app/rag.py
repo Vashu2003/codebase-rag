@@ -1,11 +1,15 @@
 """Retrieve relevant chunks, then generate a cited answer."""
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
+
 from . import store
 from .config import settings
 from .embeddings import embed_one
 from .llm import complete
 from .models import Citation, QueryResponse
+
+MAX_TOP_K = 100
 
 SYSTEM = """You are a code-comprehension assistant. Answer the question using ONLY \
 the numbered code excerpts below. Every claim must cite the excerpt it came from \
@@ -27,7 +31,9 @@ def _retrieve(repo: str, question: str, top_k: int):
     dists = (res.get("distances") or [[]])[0]
     hits = []
     for doc, meta, dist in zip(docs, metas, dists):
-        hits.append((doc, meta, 1.0 - float(dist)))  # cosine distance -> similarity
+        # cosine distance -> similarity; clamp so a near-orthogonal hit
+        # never shows a negative score in the UI
+        hits.append((doc, meta, max(0.0, 1.0 - float(dist))))
     return hits
 
 
@@ -41,8 +47,10 @@ def _build_context(hits) -> str:
 
 
 async def answer(repo: str, question: str, top_k: int | None) -> QueryResponse:
-    k = top_k or settings.top_k
-    hits = _retrieve(repo, question, k)
+    k = min(max(1, top_k or settings.top_k), MAX_TOP_K)
+    # embedding + Chroma query are CPU/IO-bound and synchronous; run them off
+    # the event loop so concurrent requests aren't serialized behind an embed.
+    hits = await run_in_threadpool(_retrieve, repo, question, k)
     if not hits:
         return QueryResponse(
             answer="No indexed content for this repo. Ingest it first.",

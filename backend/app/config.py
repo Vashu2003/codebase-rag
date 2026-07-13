@@ -16,5 +16,12 @@ class Settings(BaseSettings):
     chroma_dir: str = "./.chroma"
     top_k: int = 8
 
+    # --- ingest safety limits (this endpoint reads local files) ---
+    # If set, only paths inside this directory may be ingested. Empty = any
+    # path (fine for a single-user localhost tool; set it if ever exposed).
+    ingest_root: str = ""
+    max_files: int = 5000            # cap files per repo (DoS guard)
+    max_total_bytes: int = 200_000_000  # cap bytes per repo (~200MB)
+
 
 settings = Settings()

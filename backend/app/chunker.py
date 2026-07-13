@@ -33,8 +33,10 @@ LANG_BY_EXT = {
     ".dart": "dart",
 }
 
-# node types that make good standalone chunks, per language family
+# node types that make good standalone chunks, across language families.
+# Matching is by string, so listing a name a grammar doesn't have is harmless.
 SPLIT_NODES = {
+    # python / js / ts
     "function_definition",
     "function_declaration",
     "method_definition",
@@ -42,8 +44,21 @@ SPLIT_NODES = {
     "class_declaration",
     "method_declaration",
     "arrow_function",
-    "function_item",     # rust
-    "impl_item",         # rust
+    "interface_declaration",     # ts
+    "type_alias_declaration",    # ts
+    "enum_declaration",          # ts / java
+    # go / rust / java type + func declarations
+    "type_declaration",          # go (struct/interface)
+    "function_item",             # rust
+    "impl_item",                 # rust
+    "struct_item",               # rust
+    "trait_item",                # rust
+    "enum_item",                 # rust
+    # ruby (note: NOT "module" — that is Python's tree-sitter root node type,
+    # which would capture the whole file as one symbol-less chunk)
+    "method",
+    "singleton_method",
+    "class",
 }
 
 MAX_CHUNK_LINES = 120     # split oversized nodes with the window fallback
@@ -105,11 +120,13 @@ def chunk_file(root: Path, path: Path) -> list[Chunk]:
         return _window_chunks(rel, lines)
 
     chunks: list[Chunk] = []
+    covered: list[tuple[int, int]] = []  # 0-indexed line spans captured as symbols
 
     def visit(node):
         if node.type in SPLIT_NODES:
             start = node.start_point[0]
             end = node.end_point[0]
+            covered.append((start, end))
             span = end - start + 1
             body = raw[node.start_byte:node.end_byte].decode("utf8", "replace")
             if span > MAX_CHUNK_LINES:
@@ -129,5 +146,19 @@ def chunk_file(root: Path, path: Path) -> list[Chunk]:
 
     visit(tree.root_node)
 
-    # nothing matched (e.g. a config/script file) -> window the whole thing
-    return chunks or _window_chunks(rel, lines)
+    # nothing matched (config/script/unknown grammar) -> window the whole thing
+    if not chunks:
+        return _window_chunks(rel, lines)
+
+    # window the lines NOT inside any captured symbol so module-level code
+    # (docstrings, imports, top-level constants) is still searchable.
+    covered.sort()
+    cursor = 0
+    for start, end in covered:
+        if start > cursor:
+            chunks.extend(_window_chunks(rel, lines[cursor:start], base=cursor))
+        cursor = max(cursor, end + 1)
+    if cursor < len(lines):
+        chunks.extend(_window_chunks(rel, lines[cursor:], base=cursor))
+
+    return chunks

@@ -5,23 +5,41 @@ We pass our own embeddings in, so Chroma's default embedder is never used.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 
 import chromadb
 
 from .config import settings
 
-_client = chromadb.PersistentClient(path=settings.chroma_dir)
+_client = None
+
+
+def _get_client():
+    """Lazily build the persistent client so importing this module does no IO
+    (keeps server boot + tests fast, and lets tests point CHROMA_DIR at a tmp)."""
+    global _client
+    if _client is None:
+        _client = chromadb.PersistentClient(path=settings.chroma_dir)
+    return _client
 
 
 def _safe(repo: str) -> str:
-    # Chroma collection names: 3-63 chars, alnum/._- , start+end alnum
-    name = re.sub(r"[^a-zA-Z0-9._-]", "-", repo).strip("-._") or "repo"
-    return f"repo-{name}"[:63]
+    """Map a repo name to a valid, UNIQUE Chroma collection name.
+
+    Chroma names: 3-63 chars, [a-zA-Z0-9._-], start+end alphanumeric, no
+    consecutive periods. A readable slug alone would collide ("my repo",
+    "my-repo", "my_repo" -> same), letting one repo's ingest overwrite
+    another's index, so we append a hash of the raw name to keep it injective.
+    """
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", repo).strip("-").lower()
+    slug = slug[:48].rstrip("-") or "repo"
+    digest = hashlib.sha1(repo.encode("utf8")).hexdigest()[:8]
+    return f"repo-{slug}-{digest}"
 
 
 def collection(repo: str):
-    return _client.get_or_create_collection(
+    return _get_client().get_or_create_collection(
         name=_safe(repo),
         metadata={"hnsw:space": "cosine"},
     )
@@ -29,7 +47,7 @@ def collection(repo: str):
 
 def reset(repo: str) -> None:
     try:
-        _client.delete_collection(_safe(repo))
+        _get_client().delete_collection(_safe(repo))
     except Exception:
         pass
 

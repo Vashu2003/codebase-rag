@@ -17,7 +17,7 @@ async def _ollama(prompt: str) -> str:
             json={"model": settings.ollama_model, "prompt": prompt, "stream": False},
         )
         r.raise_for_status()
-        return r.json()["response"].strip()
+        return (r.json().get("response") or "").strip()
 
 
 async def _gemini(prompt: str) -> str:
@@ -28,14 +28,21 @@ async def _gemini(prompt: str) -> str:
         f"{settings.gemini_model}:generateContent"
     )
     async with httpx.AsyncClient(timeout=120) as client:
+        # key in a header, never the URL/body — so it can't leak via an
+        # httpx error message, access log, or exception traceback.
         r = await client.post(
             url,
-            params={"key": settings.gemini_api_key},
+            headers={"x-goog-api-key": settings.gemini_api_key},
             json={"contents": [{"parts": [{"text": prompt}]}]},
         )
         r.raise_for_status()
         data = r.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            # e.g. safety-blocked prompt returns promptFeedback but no candidates
+            raise RuntimeError("Gemini returned no answer (possibly safety-blocked)")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        return "".join(p.get("text", "") for p in parts).strip()
 
 
 async def complete(prompt: str) -> str:

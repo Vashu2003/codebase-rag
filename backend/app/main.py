@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +12,8 @@ from .models import (
     QueryRequest,
     QueryResponse,
 )
+
+log = logging.getLogger("codebase_rag")
 
 app = FastAPI(title="codebase-rag", version="0.1.0")
 
@@ -31,12 +35,18 @@ def ingest(req: IngestRequest):
     try:
         return ingest_repo(req.path, req.repo)
     except ValueError as e:
+        # these messages are safe/actionable (bad path, outside root, cap hit)
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        log.exception("ingest failed for repo=%s", req.repo)
+        raise HTTPException(status_code=500, detail="ingest failed")
 
 
 @app.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
     try:
         return await rag.answer(req.repo, req.question, req.top_k)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # never surface raw internals (may embed provider keys / paths)
+        log.exception("query failed for repo=%s", req.repo)
+        raise HTTPException(status_code=500, detail="query failed")

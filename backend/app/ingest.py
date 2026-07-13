@@ -5,6 +5,7 @@ from pathlib import Path
 
 from . import store
 from .chunker import chunk_file
+from .config import settings
 from .embeddings import embed
 from .models import IngestResponse
 
@@ -29,18 +30,40 @@ def _iter_files(root: Path):
             continue
         if p.suffix.lower() not in KEEP_EXT:
             continue
+        # reject symlinks that escape the repo root (path-traversal guard)
         try:
-            if p.stat().st_size > MAX_BYTES:
+            resolved = p.resolve()
+            if not resolved.is_relative_to(root):
                 continue
+            size = p.stat().st_size
         except OSError:
             continue
-        yield p
+        if size > MAX_BYTES:
+            continue
+        yield p, size
 
 
-def ingest_repo(path: str, repo: str) -> IngestResponse:
+def _resolve_root(path: str) -> Path:
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"not a directory: {root}")
+    if settings.ingest_root:
+        allowed = Path(settings.ingest_root).expanduser().resolve()
+        if not root.is_relative_to(allowed):
+            raise ValueError("path is outside the allowed INGEST_ROOT")
+    return root
+
+
+def ingest_repo(path: str, repo: str) -> IngestResponse:
+    root = _resolve_root(path)
+
+    # enforce caps up front, BEFORE resetting the existing index, so a breach
+    # fails cleanly instead of leaving a half-written index behind
+    files = list(_iter_files(root))
+    if len(files) > settings.max_files:
+        raise ValueError(f"repo exceeds max_files ({settings.max_files})")
+    if sum(size for _f, size in files) > settings.max_total_bytes:
+        raise ValueError(f"repo exceeds max_total_bytes ({settings.max_total_bytes})")
 
     store.reset(repo)  # fresh index on re-ingest
 
@@ -58,7 +81,7 @@ def ingest_repo(path: str, repo: str) -> IngestResponse:
         store.add(repo, ids, vecs, docs, metas)
         ids, docs, metas = [], [], []
 
-    for f in _iter_files(root):
+    for f, _size in files:
         chunks = chunk_file(root, f)
         if not chunks:
             continue
