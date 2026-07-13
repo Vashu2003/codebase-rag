@@ -94,34 +94,34 @@ def neighbors(repo: str, ids: list[str], out_cap: int, in_cap: int) -> list[dict
     seeds = set(ids)
     found: dict[str, dict] = {}
 
-    def pull(conn, sql: str, cap: int):
+    def pull(conn, sql: str, cap: int, direction: str):
         # ids are in seed-rank order (strongest first); first seed to reach a
         # neighbor wins its `via`, so neighbors inherit their best seed's score.
         for seed in ids:
-            for nid, file, s, e, sym, kind in conn.execute(sql, (repo, seed, cap)):
+            for nid, file, s, e, sym in conn.execute(sql, (repo, seed, cap)):
                 if nid in seeds or nid in found:
                     continue
                 found[nid] = {
                     "id": nid, "file": file, "start_line": s, "end_line": e,
-                    "symbol": sym, "edge": kind, "via": seed,
+                    "symbol": sym, "edge": direction, "via": seed,
                 }
 
     with _lock:
         conn = _get_conn()
-        # callees / referenced definitions (deterministic order for a stable cap)
+        # callees: symbols this seed references (seed --src--> dst)
         pull(
             conn,
-            "SELECT n.id, n.file, n.start_line, n.end_line, n.symbol, e.kind "
+            "SELECT n.id, n.file, n.start_line, n.end_line, n.symbol "
             "FROM edges e JOIN nodes n ON n.repo = e.repo AND n.id = e.dst "
             "WHERE e.repo = ? AND e.src = ? ORDER BY n.id LIMIT ?",
-            out_cap,
+            out_cap, "callee",
         )
-        # callers
+        # callers: chunks that reference this seed (src --dst--> seed)
         pull(
             conn,
-            "SELECT n.id, n.file, n.start_line, n.end_line, n.symbol, e.kind "
+            "SELECT n.id, n.file, n.start_line, n.end_line, n.symbol "
             "FROM edges e JOIN nodes n ON n.repo = e.repo AND n.id = e.src "
             "WHERE e.repo = ? AND e.dst = ? ORDER BY n.id LIMIT ?",
-            in_cap,
+            in_cap, "caller",
         )
     return list(found.values())

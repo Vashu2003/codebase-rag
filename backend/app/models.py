@@ -17,6 +17,8 @@ class Citation(BaseModel):
     # 0-1 relevance: cross-encoder rerank score when reranking is on,
     # else clamped cosine similarity. See RetrievalStats.reranked.
     score: float
+    source: str = "seed"        # 'seed' (vector hit) or 'graph' (expanded)
+    edge: str | None = None     # for graph neighbors: 'caller' or 'callee'
 
 
 class QueryRequest(BaseModel):

@@ -140,7 +140,7 @@ def test_graph_neighbor_is_merged(monkeypatch):
         rag_mod.graph, "neighbors",
         lambda repo, ids, o, i: [{
             "id": "calc.py:6", "file": "calc.py", "start_line": 6, "end_line": 8,
-            "symbol": "add", "edge": "ref", "via": "service.py:6",
+            "symbol": "add", "edge": "callee", "via": "service.py:6",
         }],
     )
     monkeypatch.setattr(
@@ -155,6 +155,7 @@ def test_graph_neighbor_is_merged(monkeypatch):
     # neighbor scored off its connecting seed (0.8) × decay, not a flat base
     neighbor = next(c for c in kept if c.file == "calc.py")
     assert neighbor.score == pytest.approx(0.8 * rag_mod.settings.graph_decay)
+    assert neighbor.source == "graph" and neighbor.edge == "callee"
 
 
 def test_retrieve_applies_reranking(monkeypatch):

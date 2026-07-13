@@ -233,6 +233,7 @@ async def answer(repo: str, question: str, top_k: int | None) -> QueryResponse:
         Citation(
             repo=repo, file=c.file, start_line=c.start_line, end_line=c.end_line,
             symbol=c.symbol or None, score=round(c.score, 4),
+            source=c.source, edge=c.edge,
         )
         for c in kept
     ]
