@@ -73,6 +73,17 @@ def test_missing_graph_returns_empty():
     assert graph.neighbors("never-ingested", ["x"], 5, 5) == []
 
 
+def test_list_repos_counts_files_and_chunks():
+    graph.reset("lr")
+    graph.add_nodes("lr", [
+        {"id": "a", "file": "x.py", "start_line": 1, "end_line": 2, "symbol": "a"},
+        {"id": "b", "file": "y.py", "start_line": 1, "end_line": 2, "symbol": "b"},
+        {"id": "c", "file": "x.py", "start_line": 3, "end_line": 4, "symbol": "c"},
+    ])
+    entry = {r["repo"]: r for r in graph.list_repos()}["lr"]
+    assert entry["files"] == 2 and entry["chunks"] == 3
+
+
 @pytest.fixture
 def mock_boundaries(monkeypatch):
     monkeypatch.setattr(ingest_mod, "embed", lambda docs: [[0.0] for _ in docs])

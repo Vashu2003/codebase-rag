@@ -19,6 +19,7 @@ class Citation(BaseModel):
     score: float
     source: str = "seed"        # 'seed' (vector hit) or 'graph' (expanded)
     edge: str | None = None     # for graph neighbors: 'caller' or 'callee'
+    snippet: str = ""           # the retrieved code, for the UI code panel
 
 
 class QueryRequest(BaseModel):

@@ -203,6 +203,40 @@ async def test_answer_returns_citations_and_stats(monkeypatch):
     assert resp.retrieval.reranked is False   # disabled in tests by default
 
 
+async def test_citation_snippet_stays_untrimmed(monkeypatch):
+    # a long graph neighbor is head-trimmed IN THE PROMPT, but its citation
+    # snippet (for the code panel) must keep the FULL body
+    monkeypatch.setattr(rag_mod.settings, "graph_enabled", True)
+    monkeypatch.setattr(rag_mod.settings, "neighbor_head_lines", 3)
+    long_body = "\n".join(f"line{i}" for i in range(40))
+    monkeypatch.setattr(rag_mod, "embed_one", lambda q: [0.0])
+    monkeypatch.setattr(
+        rag_mod.store, "query",
+        lambda repo, emb, k: _qresult(["seed body"], [_meta("s.py", 1, 2, "s")],
+                                      [0.2], ids=["s.py:1"]),
+    )
+    monkeypatch.setattr(
+        rag_mod.graph, "neighbors",
+        lambda repo, ids, o, i: [{
+            "id": "big.py:1", "file": "big.py", "start_line": 1, "end_line": 40,
+            "symbol": "big", "edge": "callee", "via": "s.py:1",
+        }],
+    )
+    monkeypatch.setattr(rag_mod.store, "get_by_ids", lambda repo, ids: {"big.py:1": long_body})
+    captured = {}
+
+    async def fake_complete(prompt):
+        captured["prompt"] = prompt
+        return "ok [1]"
+
+    monkeypatch.setattr(rag_mod, "complete", fake_complete)
+    resp = await rag_mod.answer("r", "q", None)
+
+    assert "truncated" in captured["prompt"]          # prompt copy IS trimmed
+    big = next(c for c in resp.citations if c.file == "big.py")
+    assert "line39" in big.snippet and "truncated" not in big.snippet  # snippet is full
+
+
 async def test_top_k_is_clamped(monkeypatch):
     seen = {}
 

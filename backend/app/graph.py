@@ -50,6 +50,16 @@ def _get_conn() -> sqlite3.Connection:
     return _conn
 
 
+def list_repos() -> list[dict]:
+    """Every ingested repo with its indexed file count, most-recent-ish first."""
+    with _lock:
+        rows = _get_conn().execute(
+            "SELECT repo, COUNT(DISTINCT file) AS files, COUNT(*) AS chunks "
+            "FROM nodes GROUP BY repo ORDER BY repo"
+        ).fetchall()
+    return [{"repo": r, "files": f, "chunks": c} for r, f, c in rows]
+
+
 def reset(repo: str) -> None:
     with _lock:
         conn = _get_conn()

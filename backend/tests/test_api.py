@@ -10,6 +10,12 @@ def test_health(client):
     assert "llm_provider" in body
 
 
+def test_repos_endpoint(client):
+    r = client.get("/repos")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
 def test_ingest_bad_path_returns_400(client):
     r = client.post("/ingest", json={"path": "/no/such/dir-xyz", "repo": "x"})
     assert r.status_code == 400

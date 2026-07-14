@@ -9,20 +9,391 @@
 body {
   @apply bg-bg font-sans text-ink antialiased;
   /* faint blueprint dot-grid — the graph made ambient */
-  background-image: radial-gradient(#2a3e63 0.9px, transparent 0.9px);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(92, 168, 248, 0.075) 1px,
+    transparent 0
+  );
   background-size: 22px 22px;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 /* visible, on-brand focus for keyboard users */
 *:focus-visible {
   outline: 2px solid theme("colors.cyan");
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(94, 234, 212, 0.24);
+}
+
+/* ---- slim blueprint scrollbars ---- */
+.scroll-slim::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: #22314c;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: #22314c transparent;
+}
+
+/* =========================================================
+   Answer prose (react-markdown output)
+   ========================================================= */
+.prose-answer p {
+  margin: 0 0 14px;
+  max-width: 62ch;
+  color: theme("colors.ink");
+}
+.prose-answer h1,
+.prose-answer h2 {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.015em;
+  color: theme("colors.inkbright");
+  margin: 4px 0 12px;
+}
+.prose-answer h3,
+.prose-answer h4 {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: theme("colors.mute");
+  margin: 22px 0 10px;
+}
+.prose-answer ul,
+.prose-answer ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  max-width: 62ch;
+}
+.prose-answer li {
+  margin: 0 0 7px;
+  color: theme("colors.ink");
+}
+.prose-answer li::marker {
+  color: theme("colors.azure");
+  font-family: var(--font-mono), monospace;
+  font-size: 0.9em;
+}
+.prose-answer strong {
+  color: theme("colors.inkbright");
+  font-weight: 600;
+}
+.prose-answer a {
+  color: theme("colors.azure");
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-answer :not(pre) > code {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  background: rgba(92, 168, 248, 0.11);
+  border: 1px solid rgba(92, 168, 248, 0.16);
+  color: #b8d4f5;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.prose-answer pre {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: theme("colors.panel2");
+  border: 1px solid theme("colors.linesoft");
   border-radius: 6px;
+}
+.prose-answer pre code {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: theme("colors.ink");
+}
+.prose-answer blockquote {
+  margin: 0 0 14px;
+  padding-left: 12px;
+  border-left: 2px solid theme("colors.line");
+  color: theme("colors.mute");
+}
+.prose-answer table {
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.prose-answer th,
+.prose-answer td {
+  border: 1px solid theme("colors.linesoft");
+  padding: 5px 9px;
+  text-align: left;
+}
+.prose-answer th {
+  color: theme("colors.inkbright");
+  font-weight: 600;
+}
+
+/* inline citation chip (rendered from [n] tokens) */
+.cite-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin: 0 1px 0 3px;
+  vertical-align: baseline;
+  transform: translateY(-2px);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 999px;
+  background: rgba(92, 168, 248, 0.12);
+  border: 1px solid rgba(92, 168, 248, 0.35);
+  color: theme("colors.azure");
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.cite-chip:hover {
+  background: rgba(92, 168, 248, 0.24);
+  color: #cfe4ff;
+}
+.cite-chip.seed {
+  color: theme("colors.cyan");
+  border-color: rgba(94, 234, 212, 0.4);
+  background: rgba(94, 234, 212, 0.1);
+}
+.cite-chip.active {
+  background: theme("colors.azure");
+  border-color: theme("colors.azure");
+  color: #07130f;
+}
+.cite-chip.seed.active {
+  background: theme("colors.cyan");
+  border-color: theme("colors.cyan");
+  color: #07130f;
+}
+
+/* =========================================================
+   Code panel — line gutter + on-brand highlight.js tokens
+   ========================================================= */
+.code-body {
+  min-width: 100%;
+  width: max-content;
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  padding: 8px 0;
+}
+.code-line {
+  display: flex;
+  align-items: flex-start;
+}
+.code-line .gutter {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  width: 56px;
+  text-align: right;
+  padding: 0 14px 0 0;
+  color: #43567a;
+  user-select: none;
+  background: theme("colors.panel2");
+  border-right: 1px solid theme("colors.linesoft");
+}
+.code-line .content {
+  padding: 0 20px 0 16px;
+  white-space: pre;
+  color: theme("colors.ink");
+}
+.code-line.matched {
+  background: rgba(94, 234, 212, 0.06);
+}
+.code-line.matched .gutter {
+  background: linear-gradient(90deg, rgba(94, 234, 212, 0.12), theme("colors.panel2"));
+  color: theme("colors.cyan");
+  box-shadow: inset 3px 0 0 theme("colors.cyan");
+}
+.code-line.matched .content {
+  color: theme("colors.inkbright");
+}
+
+/* highlight.js classes mapped to the blueprint palette */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag {
+  color: theme("colors.cyan");
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-name {
+  color: theme("colors.inkbright");
+  font-weight: 600;
+}
+.hljs-built_in,
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-tag {
+  color: theme("colors.azure");
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-template-tag,
+.hljs-quote {
+  color: theme("colors.string");
+}
+.hljs-number,
+.hljs-bullet {
+  color: theme("colors.warm");
+}
+.hljs-comment {
+  color: theme("colors.mute");
+  font-style: italic;
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: theme("colors.warm");
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-params,
+.hljs-variable {
+  color: theme("colors.ink");
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* =========================================================
+   Graph tab — SVG call-flow edges
+   ========================================================= */
+.graph-edge {
+  fill: none;
+  stroke: theme("colors.azure");
+  stroke-width: 1.5;
+  opacity: 0.5;
+  stroke-linecap: round;
+  transition:
+    stroke-width 0.2s ease,
+    opacity 0.2s ease,
+    stroke 0.2s ease;
+}
+.graph-edge.hot {
+  stroke: theme("colors.cyan");
+  opacity: 1;
+  stroke-width: 2.3;
+  stroke-dasharray: 6 6;
+  animation: edge-flow 0.9s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.45));
+}
+.graph-edge.dim {
+  opacity: 0.14;
+}
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.edge-label-bg {
+  fill: theme("colors.panel2");
+  stroke: theme("colors.line");
+}
+.edge-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: theme("colors.mute");
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.graph-edge-group.hot .edge-label {
+  fill: theme("colors.cyan");
+}
+.graph-edge-group.dim .edge-label,
+.graph-edge-group.dim .edge-label-bg {
+  opacity: 0.25;
+}
+
+/* =========================================================
+   Mobile bottom sheet (right work pane)
+   ========================================================= */
+@media (min-width: 901px) {
+  .sheet-grab,
+  .sheet-close {
+    display: none !important;
+  }
+}
+@media (max-width: 900px) {
+  .work-pane {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    height: 82vh;
+    z-index: 50;
+    border-top: 1px solid theme("colors.line");
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -18px 50px -12px rgba(3, 7, 18, 0.8);
+    transform: translateY(102%);
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0.24, 1);
+  }
+  .work-pane.open {
+    transform: translateY(0);
+  }
+}
+
+/* thinking indicator — a soft staggered fade, no bounce/elastic */
+.thinking-dot {
+  animation: thinking-fade 1.4s ease-in-out infinite;
+}
+@keyframes thinking-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+  .graph-edge.hot {
+    stroke-dasharray: none;
+  }
+  /* dots settle to a calm crossfade rather than pulsing */
+  .thinking-dot {
+    animation: none;
+    opacity: 0.7;
   }
 }

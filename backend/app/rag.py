@@ -49,7 +49,7 @@ Answer (cite excerpts as [n]):"""
 @dataclass
 class Cand:
     id: str
-    text: str
+    text: str             # full retrieved chunk (used verbatim as the citation snippet)
     file: str
     start_line: int
     end_line: int
@@ -57,6 +57,7 @@ class Cand:
     score: float
     source: str          # 'seed' | 'graph'
     edge: str | None = None
+    prompt_text: str = ""  # what actually goes in the LLM prompt (may be head-trimmed)
 
 
 def _token_est(text: str) -> int:
@@ -168,9 +169,13 @@ def _fit_budget(cands: list[Cand]) -> tuple[list[Cand], int]:
     kept: list[Cand] = []
     used = 0
     for c in cands:
-        if c.source == "graph":
-            c.text = _head_trim(c.text, settings.neighbor_head_lines)
-        t = _token_est(c.text) + _FRAME_TOKENS           # include per-chunk prompt framing
+        # head-trim graph neighbors for the PROMPT only; keep c.text full so the
+        # citation snippet (code panel) always shows the whole chunk.
+        c.prompt_text = (
+            _head_trim(c.text, settings.neighbor_head_lines)
+            if c.source == "graph" else c.text
+        )
+        t = _token_est(c.prompt_text) + _FRAME_TOKENS     # include per-chunk prompt framing
         if kept and used + t > settings.context_token_budget:
             break                                        # top hit always survives
         kept.append(c)
@@ -214,7 +219,8 @@ def _build_context(cands: list[Cand]) -> str:
         loc = f"{c.file}:{c.start_line}-{c.end_line}"
         sym = f" ({c.symbol})" if c.symbol else ""
         via = " [via call-graph]" if c.source == "graph" else ""
-        blocks.append(f"[{i}] {loc}{sym}{via}\n```\n{c.text}\n```")
+        body = c.prompt_text or c.text
+        blocks.append(f"[{i}] {loc}{sym}{via}\n```\n{body}\n```")
     return "\n\n".join(blocks)
 
 
@@ -233,7 +239,7 @@ async def answer(repo: str, question: str, top_k: int | None) -> QueryResponse:
         Citation(
             repo=repo, file=c.file, start_line=c.start_line, end_line=c.end_line,
             symbol=c.symbol or None, score=round(c.score, 4),
-            source=c.source, edge=c.edge,
+            source=c.source, edge=c.edge, snippet=c.text,
         )
         for c in kept
     ]

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import embeddings, rag, reranker
+from . import embeddings, graph, rag, reranker
 from .config import settings
 from .ingest import ingest_source
 from .models import (
@@ -50,6 +50,18 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok", "llm_provider": settings.llm_provider}
+
+
+@app.get("/repos")
+def repos():
+    """Indexed repos (for the UI's repo switcher). Empty if graph is disabled."""
+    if not settings.graph_enabled:
+        return []
+    try:
+        return graph.list_repos()
+    except Exception:
+        log.exception("listing repos failed")
+        return []
 
 
 @app.post("/ingest", response_model=IngestResponse)

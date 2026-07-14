@@ -9,6 +9,8 @@ export type Citation = {
   score: number;
   source: "seed" | "graph";
   edge: "caller" | "callee" | null;
+  /** the actual retrieved code — powers the Code tab and graph-card signatures */
+  snippet: string;
 };
 
 export type RetrievalStats = {
@@ -33,16 +35,29 @@ export type IngestResponse = {
   chunks_indexed: number;
 };
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+/** An already-indexed repo, for the switcher. */
+export type Repo = {
+  repo: string;
+  files: number;
+  chunks: number;
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, init);
+  } catch {
+    // network-level failure (backend down, CORS, DNS) — fetch rejects with no body
+    throw new Error(
+      `Can't reach the backend at ${BASE}. Is it running? (uvicorn app.main:app)`,
+    );
+  }
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const detail = body?.detail;
-    // FastAPI sends a string detail for HTTPException but an array of error
+    const payload = (await res.json().catch(() => null)) as {
+      detail?: unknown;
+    } | null;
+    const detail = payload?.detail;
+    // FastAPI sends a string detail for HTTPException, but an array of error
     // objects for 422 validation errors — stringify the latter so it's readable.
     const message =
       typeof detail === "string"
@@ -52,17 +67,37 @@ async function post<T>(path: string, body: unknown): Promise<T> {
           : `Request failed (${res.status})`;
     throw new Error(message);
   }
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
-// `source` is a GitHub URL (cloned server-side) or a local path. For a URL the
-// repo name is optional — the backend derives it from the URL.
-export const ingest = (source: string, repo: string) => {
+function post<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Indexed repos for the switcher. Returns [] when none / graph disabled. */
+export function listRepos(): Promise<Repo[]> {
+  return request<Repo[]>("/repos");
+}
+
+/**
+ * Index a repository. `source` is a GitHub URL (cloned server-side) or a local
+ * path. For a URL the repo name is optional — the backend derives it.
+ */
+export function ingest(source: string, repo?: string): Promise<IngestResponse> {
   const body = /^https?:\/\//.test(source)
     ? { url: source, repo: repo || undefined }
     : { path: source, repo };
   return post<IngestResponse>("/ingest", body);
-};
+}
 
-export const query = (repo: string, question: string) =>
-  post<QueryResponse>("/query", { repo, question });
+export function query(
+  repo: string,
+  question: string,
+  topK?: number,
+): Promise<QueryResponse> {
+  return post<QueryResponse>("/query", { repo, question, top_k: topK });
+}
